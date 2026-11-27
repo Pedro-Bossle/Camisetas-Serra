@@ -234,6 +234,10 @@ button.kpi:hover{border-color:var(--muted)}
     </div>
     <div class="tb-filters" id="tbFilters">
       <label class="sel"><span>Produto</span><select id="prodFilter"><option value="">Todos</option></select></label>
+      <label class="sel" id="prodModeWrap" hidden><span>Pedidos que</span><select id="prodMode">
+        <option value="only">Têm somente esse</option>
+        <option value="any">Contêm esse (e outros)</option>
+      </select></label>
       <label class="sel"><span>Capítulo</span><select id="chapterFilter"><option value="">Todos</option></select></label>
       <label class="sel"><span>Ordem</span><select id="sort">
         <option value="name">Nome (A–Z)</option>
@@ -595,6 +599,8 @@ function render(){
     + `<optgroup label="Por produto">${db.products.map(p=>popt('prod:'+p.id,p.name)).join('')}</optgroup>`;
   if (pf.value !== pcur) pf.value = '';
   const im = itemMatcher(pf.value);
+  const onlyMode = $('#prodMode').value === 'only';
+  $('#prodModeWrap').hidden = !im;
 
   // list
   const q = $('#q').value.trim().toLowerCase();
@@ -603,7 +609,7 @@ function render(){
   const base = db.orders.filter(o => {
     if (cf.value && o.chapter !== cf.value) return false;
     if (nq && !norm(`${o.name} ${o.chapter} ${o.phone} ${o.notes}`).includes(nq)) return false;
-    if (im && !o.items.some(im)) return false;
+    if (im && !(onlyMode ? o.items.length > 0 && o.items.every(im) : o.items.some(im))) return false;
     return true;
   });
   const passes = (o, f) => {
@@ -630,7 +636,7 @@ function render(){
   if (im){
     const its = rows.flatMap(o=>o.items.filter(im));
     const q = its.reduce((s,i)=>s+num(i.qty),0), qd = its.filter(i=>i.delivered).reduce((s,i)=>s+num(i.qty),0);
-    extra = ` · ${q} ${q===1?'unidade':'unidades'} (${q-qd} a entregar) · ${brl(its.reduce((s,i)=>s+lineCents(i),0)/100)}`;
+    extra = `${onlyMode?' só com esse item':' com esse item'} · ${q} ${q===1?'unidade':'unidades'} (${q-qd} a entregar) · ${brl(its.reduce((s,i)=>s+lineCents(i),0)/100)}`;
   }
   $('#count').textContent = `${rows.length} de ${db.orders.length} pedidos${extra}`;
   $('#list').innerHTML = rows.length ? rows.map(o=>orderCard(o,im)).join('') : `<div class="empty">Nenhum pedido aqui.</div>`;
@@ -689,7 +695,7 @@ $('#cats').addEventListener('click', e => {
 });
 $('#btnFilters').onclick = () => { const t=$('#toolbar'); t.classList.toggle('open'); $('#btnFilters').setAttribute('aria-expanded', t.classList.contains('open')); };
 $('#clearF').onclick = () => { $('#prodFilter').value=''; $('#chapterFilter').value=''; $('#q').value=''; filter='all'; render(); };
-['#q','#chapterFilter','#prodFilter','#sort'].forEach(s=>$(s).addEventListener('input',render));
+['#q','#chapterFilter','#prodFilter','#prodMode','#sort'].forEach(s=>$(s).addEventListener('input',render));
 
 // ---------- quick pay ----------
 let payTarget=null;
@@ -873,6 +879,8 @@ document.addEventListener('focusout', e => {
   el.value = fmtMoney(el.value);
 });
 
+try { const m = localStorage.getItem(KEY+'-modo'); if (m) $('#prodMode').value = m; } catch(e){}
+$('#prodMode').addEventListener('change', () => setLS(KEY+'-modo', $('#prodMode').value));
 load(); render();
 connect().then(() => { if (!db.orders.length) setTimeout(()=>toast('Sem pedidos: importe o .json em 💾 Dados'),400); });
 })();
